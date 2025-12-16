@@ -1,0 +1,13 @@
+# Python artifacts
+__pycache__/
+*.pyc
+
+# Virtual Environment
+.venv/
+.env
+
+# Dependencies managed by pip (often large)
+.DS_Store # macOS artifact
+
+# Keys and sensitive configuration
+SERPAPI_API_KEY
