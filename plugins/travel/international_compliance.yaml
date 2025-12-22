@@ -1,0 +1,13 @@
+name: "international_compliance"
+description: "High-stakes regulatory and entry requirements for international travel."
+objectives:
+  - section: "Border & Entry"
+    tasks:
+      - "Verify visa requirements for [Nationality] citizens entering [Target]."
+      - "Check the '6-month validity' rule for passports in [Target]."
+      - "Identify any mandatory digital entry forms or QR codes (e.g., K-ETA, SG Arrival)."
+  - section: "Health & Laws"
+    tasks:
+      - "List mandatory vaccinations and current health advisory levels."
+      - "Identify 'High-Risk' local laws (e.g., strict medication bans, photography restrictions)."
+      - "Provide the location and contact of the nearest [Nationality] embassy."

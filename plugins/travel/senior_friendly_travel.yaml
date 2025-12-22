@@ -1,0 +1,13 @@
+name: "senior_friendly_travel"
+description: "Accessibility and comfort-first research for older travelers."
+objectives:
+  - section: "Mobility & Accessibility"
+    tasks:
+      - "Verify hotel accessibility: Are there elevators, ground-floor rooms, and grab-bars?"
+      - "Find landmarks with 'Low-Impact' entry points (ramps and minimal stairs)."
+      - "Identify private transport or shuttle services to avoid long walks at transit hubs."
+  - section: "Health & Comfort"
+    tasks:
+      - "Locate nearby hospitals and verify if they accept international insurance/Medicare."
+      - "Check for 'Quiet-Zone' hotels away from late-night noise or busy traffic."
+      - "Research climate comfort: Identify indoor/shaded alternatives if high heat is expected."

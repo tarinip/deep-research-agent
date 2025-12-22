@@ -1,0 +1,8 @@
+domain_name: "travel"
+description: "Handles all queries related to trips, vacations, flights, and destinations."
+# These 'anchors' help the AI recognize the vibe of travel
+semantic_anchors:
+  - "I want to go on a trip"
+  - "Planning a vacation to a new city"
+  - "Finding hotels and things to do"
+  - "Travel safety and entry requirements"

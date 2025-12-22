@@ -1,0 +1,15 @@
+name: "general_travel"
+description: "Standard comprehensive research for any destination."
+objectives:
+  - section: "Top Attractions"
+    tasks:
+      - "List the top 5 must-see landmarks in [target]."
+      - "Identify the best time of day to visit to avoid crowds."
+  - section: "Local Practicalities"
+    tasks:
+      - "What is the primary mode of public transport?"
+      - "List 3 common cultural etiquettes to follow."
+  - section: "Dining & Stay"
+    tasks:
+      - "Find 3 highly-rated local restaurants in the city center."
+      - "Identify the safest neighborhoods for tourists to stay in."

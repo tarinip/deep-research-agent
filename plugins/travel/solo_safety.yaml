@@ -1,0 +1,11 @@
+name: "solo_safety"
+description: "Security and social-first research for individuals."
+objectives:
+  - section: "Safety Mapping"
+    tasks:
+      - "Identify neighborhoods to avoid after dark based on recent local forums."
+      - "Find 2-3 safe, pre-booked taxi apps with 'Track-My-Ride' features."
+  - section: "Social Integration"
+    tasks:
+      - "Find 'Social Hostels' or group tours specifically rated for solo meetups."
+      - "Identify local classes (e.g., cooking, yoga) with a high solo-attendee rate."

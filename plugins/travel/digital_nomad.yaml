@@ -1,0 +1,14 @@
+name: "digital_nomad"
+description: "Productivity-focused research for remote workers and nomads."
+objectives:
+  - section: "Work Infrastructure"
+    tasks:
+      - "Find 3 coworking spaces with verified Wi-Fi speeds (>50Mbps) in [Target]."
+      - "Identify 'Laptop-Friendly' cafes with reliable power outlets."
+  - section: "Connectivity & Community"
+    tasks:
+      - "Compare the best local eSIM vs. Physical SIM options for data coverage."
+      - "Identify local Slack/Discord communities or weekly nomad meetups."
+  - section: "Living Standards"
+    tasks:
+      - "Estimate the monthly 'Nomad Cost of Living' including a studio and daily coworking."

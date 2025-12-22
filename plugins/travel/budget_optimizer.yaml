@@ -1,0 +1,11 @@
+name: "budget_optimizer"
+description: "Cost-minimization research for backpackers and students."
+objectives:
+  - section: "Daily Savings"
+    tasks:
+      - "Find the best-rated 'Free Walking Tours' and free museum days."
+      - "Locate local 'Food Halls' or markets where meals are under $10."
+  - section: "Transit Hacks"
+    tasks:
+      - "Identify multi-day 'Unlimited' transit passes that include ferries or rail."
+      - "Find the cheapest safe transport from the airport (e.g., local bus vs. express)."

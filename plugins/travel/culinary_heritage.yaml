@@ -1,0 +1,11 @@
+name: "culinary_heritage"
+description: "Foodie and history-centric destination research."
+objectives:
+  - section: "Authentic Tastes"
+    tasks:
+      - "Identify 3 'Signature Dishes' and the historically oldest restaurant serving them."
+      - "Find morning 'Wet Markets' or farm-to-table tours in the region."
+  - section: "Historical Context"
+    tasks:
+      - "Identify the nearest UNESCO World Heritage site and its significance."
+      - "Research local etiquette rules regarding dining or sacred site visits."

@@ -1,0 +1,12 @@
+name: "weekend_getaway"
+description: "High-efficiency research for short-duration trips (2-3 days)."
+objectives:
+  - section: "Time Management"
+    tasks:
+      - "Identify the fastest transport option from the airport/station to the city center."
+      - "Locate a hotel with a 'Central Hub' rating (walking distance to >3 major sites)."
+      - "Check for 'Skip-the-Line' or 'Timed-Entry' tickets for the top 2 attractions."
+  - section: "Curated Itinerary"
+    tasks:
+      - "Find 3 high-impact evening activities (e.g., night markets, rooftop views)."
+      - "Identify one 'Local Secret' dining spot that doesn't require a week-long reservation."

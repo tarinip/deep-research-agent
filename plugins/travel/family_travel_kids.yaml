@@ -1,0 +1,13 @@
+name: "family_travel_kids"
+description: "Friction-reduction research for parents traveling with children or toddlers."
+objectives:
+  - section: "Kid-Friendly Infrastructure"
+    tasks:
+      - "Find hotels with specific family amenities (e.g., play areas, kids' club, or kiddy pools)."
+      - "Identify restaurants with 'Non-Tourist' kids' menus and high-chair availability."
+      - "Locate the nearest playground or green space to the primary accommodation."
+  - section: "Safety & Logistics"
+    tasks:
+      - "Check if local tap water is safe or if specialized baby water is needed."
+      - "Research 'Stroller-Friendliness' of the top 3 landmarks (elevators vs. stairs)."
+      - "Identify 24-hour pharmacies or pediatric-capable medical centers nearby."

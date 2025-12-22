@@ -1,0 +1,31 @@
+# templates/competitor_analysis.yaml
+
+track_info:
+  id: "comp_analysis_v1"
+  name: "Strategic Competitor Analysis"
+  description: "Analyzes a company's product, market position, and tech stack."
+
+# Research depth controls (Productivity & Cost management)
+settings:
+  depth: 3              # Levels of recursive searching
+  max_sources: 10       # Max websites to crawl per question
+  priority_sources:     # Whitelist: Trust these more
+    - "techcrunch.com"
+    - "crunchbase.com"
+    - "reuters.com"
+
+# The structured blueprint the Agent follows
+objectives:
+  - section: "Core Product & UVP"
+    tasks:
+      - "Identify the primary product/service of [TARGET]"
+      - "What is their Unique Value Proposition (UVP) compared to others?"
+      
+  - section: "Financials & Scale"
+    tasks:
+      - "Find recent funding rounds or revenue estimates for [TARGET]"
+      - "What is their approximate team size or market share?"
+
+  - section: "Technology Stack"
+    tasks:
+      - "What programming languages and cloud providers does [TARGET] use?"

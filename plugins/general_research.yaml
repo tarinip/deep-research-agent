@@ -1,0 +1,15 @@
+
+name: "General Research Plan"
+settings:
+  depth: "intermediate"
+  max_sources: 5
+
+objectives:
+  - section: "Overview"
+    tasks:
+      - "Provide a high-level summary of the subject."
+      - "Identify key stakeholders or major entities involved."
+  - section: "Current State"
+    tasks:
+      - "What are the most recent developments (last 12 months)?"
+      - "What are the primary challenges or controversies?"

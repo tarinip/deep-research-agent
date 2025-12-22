@@ -1,0 +1,12 @@
+name: "luxury_bespoke"
+description: "VIP and high-end experience research."
+objectives:
+  - section: "Exclusive Access"
+    tasks:
+      - "Identify 3 'Private Entry' or 'After-Hours' experiences at major landmarks."
+      - "Research Michelin-starred or 'Invite-Only' dining options in [Target]."
+  - section: "Premium Logistics"
+    tasks:
+      - "Locate private chauffeur or executive airport fast-track services."
+      - "Find 'Boutique' stays with personal concierge or 24/7 butler service."
+      

@@ -1,0 +1,12 @@
+name: "adventure_audit"
+description: "Safety and equipment-focused research for outdoor explorers."
+objectives:
+  - section: "Terrain & Safety"
+    tasks:
+      - "Research specific permits or entrance fees required for [Activity] in [Target]."
+      - "Identify the current seasonal weather hazards (e.g., monsoon, avalanche risk)."
+      - "Map the nearest specialized emergency medical or rescue services."
+  - section: "Gear & Logistics"
+    tasks:
+      - "Find highly-rated equipment rental shops for [Activity] gear."
+      - "Identify 2-3 certified local guides or safety-first tour operators."

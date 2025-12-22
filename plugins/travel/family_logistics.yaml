@@ -1,0 +1,11 @@
+name: "family_logistics"
+description: "Stress-reduction research for multi-generational travel."
+objectives:
+  - section: "Accessibility"
+    tasks:
+      - "Identify stroller-friendly routes for the top 3 landmarks in [Target]."
+      - "Find hotels that specifically offer interconnecting rooms or crib rentals."
+  - section: "Engagement"
+    tasks:
+      - "Locate 'Interactive' museums or parks with high ratings for children."
+      - "Identify family-friendly restaurants with specific dietary/kid menus."
