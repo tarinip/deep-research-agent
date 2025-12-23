@@ -213,7 +213,7 @@ from nodes.reseach_brief import build_research_brief
 from nodes.research import run_actual_research
 from nodes.reflection import run_reflection_tool
 from nodes.synthesis import run_synthesis
-
+from langchain_core.tracers.langchain import wait_for_all_tracers
 # Load environment variables
 load_dotenv()
 
@@ -264,6 +264,10 @@ def research_brief_node(state: ResearchState) -> ResearchState:
 # Graph Builder
 # ============================================================
 
+# ============================================================
+# Graph Builder
+# ============================================================
+
 def build_research_graph():
     graph = StateGraph(ResearchState)
 
@@ -300,17 +304,17 @@ def build_research_graph():
 
     return graph.compile()
 
+# --- CRITICAL: Define 'app' at the top level for Streamlit to find ---
+app = build_research_graph()
 
 # ============================================================
-# Runner (User interaction loop)
+# Runner (User interaction loop for terminal)
 # ============================================================
 
 def run_deep_research():
     print("\n🤖 Deep Research System Initialized\n")
-
     user_query = input("🧑 Enter your research query: ")
 
-    # Initialize state with all keys including new Mission/Retry keys
     current_state: ResearchState = {
         "user_query": user_query,
         "messages": [],
@@ -325,54 +329,30 @@ def run_deep_research():
         "is_data_sufficient": False,
         "final_report": None
     }
-
-    graph = build_research_graph()
     
     while True:
         print("\n--- Invoking Graph ---")
-        
-        # Execute the graph
-        final_state = graph.invoke(current_state)
+        # Use the globally defined 'app'
+        final_state = app.invoke(current_state)
         
         scoping_result = final_state.get("scoping_result", {})
         
-        # 1. Handle Clarification Loop (SAFE VERSION)
         if final_state.get("next_node") == "clarification_needed":
-            # Use .get() to prevent KeyError if the LLM skips the key
-            question = scoping_result.get("clarification_question", "I need a bit more info. Can you clarify your request?")
-            
-            print("\n" + "="*30)
-            print("🛑 CLARIFICATION REQUIRED")
-            print("="*30)
-            print(f"AI: {question}")
-            
+            question = scoping_result.get("clarification_question", "Clarification needed.")
+            print(f"\nAI: {question}")
             user_input = input("\n🧑 Your Clarification: ")
             
-            # Prepare state for the re-run
             current_state = final_state
             current_state["user_query"] = f"{current_state['user_query']} (Clarified: {user_input})"
-            
             current_state["scoping_result"] = {} 
             current_state["next_node"] = None
-            current_state["clarification_depth"] = current_state.get("clarification_depth", 0) + 1
-            
-            continue # Re-run scoping
+            continue 
             
         else:
-            # 2. Final Report Output
-            print("\n" + "="*30)
-            print("🎉 RESEARCH COMPLETE")
-            print("="*30)
-
-            final_report = final_state.get("final_report")
-            if final_report:
-                print(f"\n{final_report}")
-                print(f"\n✅ Mission {final_state.get('mission_id')} archived in Postgres.")
-            else:
-                print("\n❌ Error: The agent completed the graph but no report was generated.")
-            
+            print(f"\n{final_state.get('final_report', 'No report generated.')}")
             break 
-
+    
+    wait_for_all_tracers()
 
 if __name__ == "__main__":
     run_deep_research()

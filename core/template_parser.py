@@ -1,38 +1,79 @@
 import os
 import yaml
+from typing import Dict, List, Any
 
 class ResearchTemplateLoader:
     def __init__(self, base_path="plugins"):
-        self.base_path = os.path.join(os.getcwd(), base_path)
+        # Ensures we have an absolute path to your plugins folder
+        self.base_path = os.path.abspath(os.path.join(os.getcwd(), base_path))
 
-    def get_domain_map(self):
+    def get_domain_map(self) -> Dict[str, List[str]]:
         """Scans folders to see what domains and templates exist."""
         domain_map = {}
         if not os.path.exists(self.base_path):
             return {"general": ["standard_research"]}
 
-        for root, dirs, files in os.walk(self.base_path):
-            for domain in dirs:
-                domain_path = os.path.join(root, domain)
-                templates = [f.replace('.yaml', '') for f in os.listdir(domain_path) if f.endswith('.yaml')]
+        # List only the top-level directories in /plugins as domains
+        for domain in os.listdir(self.base_path):
+            domain_path = os.path.join(self.base_path, domain)
+            if os.path.isdir(domain_path):
+                templates = [
+                    f.replace('.yaml', '') 
+                    for f in os.listdir(domain_path) 
+                    if f.endswith('.yaml')
+                ]
                 if templates:
                     domain_map[domain] = templates
         return domain_map
 
-    # THIS IS THE FUNCTION YOUR SCOPING.PY IS LOOKING FOR
-    def load_from_domain(self, domain, template, target): # <--- MATCH THESE NAMES
+    def load_from_domain(self, domain: str, template: str, target: str) -> Dict[str, Any]:
+        """Loads a single YAML file and injects the target string."""
         file_path = os.path.join(self.base_path, domain, f"{template}.yaml")
         
-        # Fallback to general.yaml if the specific one is missing
         if not os.path.exists(file_path):
+            # Fallback check: if the specific template doesn't exist, try 'general'
+            print(f"⚠️ Template {template} not found in {domain}, trying 'general'...")
             file_path = os.path.join(self.base_path, domain, "general.yaml")
 
         if not os.path.exists(file_path):
-            raise FileNotFoundError(f"Could not find template '{template}' or 'general' in folder '{domain}'")
-            
-        with open(file_path, 'r') as f:
-            config = yaml.safe_load(f)
+            raise FileNotFoundError(f"Could not find template '{template}' or 'general' in domain '{domain}'")
 
-        config['current_target'] = target
-        config['active_domain'] = domain
-        return config
+        with open(file_path, 'r') as f:
+            data = yaml.safe_load(f)
+
+        # Replace all instances of {target} in the YAML with the actual entity (e.g., "Tokyo")
+        return self._inject_target(data, target)
+
+    def load_multiple_from_domain(self, domain: str, templates: list, target: str) -> Dict[str, Any]:
+        """Merges multiple templates into a single combined research plan."""
+        combined_objectives = []
+        final_settings = {"depth": "intermediate"}
+
+        for t_name in templates:
+            try:
+                # This calls the method we just defined above
+                plan = self.load_from_domain(domain, t_name, target)
+                
+                if "objectives" in plan:
+                    combined_objectives.extend(plan["objectives"])
+                
+                # If any selected template requires 'deep' depth, upgrade the whole mission
+                if plan.get("settings", {}).get("depth") == "deep":
+                    final_settings["depth"] = "deep"
+            except Exception as e:
+                print(f"⚠️ Error loading template '{t_name}': {e}")
+
+        return {
+            "objectives": combined_objectives,
+            "settings": final_settings
+        }
+
+    def _inject_target(self, data: Any, target: str) -> Any:
+        """Recursively replaces '{target}' placeholders with the actual target name."""
+        if isinstance(data, dict):
+            return {k: self._inject_target(v, target) for k, v in data.items()}
+        elif isinstance(data, list):
+            return [self._inject_target(i, target) for i in data]
+        elif isinstance(data, str):
+            return data.replace("{target}", target)
+        return data
