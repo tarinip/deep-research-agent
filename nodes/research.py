@@ -137,7 +137,7 @@ def run_deep_research(state: ResearchState) -> ResearchState:
 
         except Exception as e:
             print(f"   ❌ Task {task_id} failed: {e}")
-            cur.execute("UPDATE research_tasks SET status = 'failed' WHERE id = %s", (task_id,))
+            cur.execute("UPDATE research_tasks SET status = 'failed' WHERE mission_id = %s", (task_id,))
             conn.commit()
 
     cur.close()

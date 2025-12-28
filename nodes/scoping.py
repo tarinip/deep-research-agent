@@ -278,21 +278,22 @@
 
 #     return state, "research_brief"
 import json
+import uuid
 from typing import Dict, Any, Tuple
 from my_llm.ollama_client import chat_with_llm
 from utils.json_sanitizer import sanitize_json_string
 from nodes.research import run_fast_research, run_deep_research 
 # For Deep Mode persistence
 import psycopg2
-
+from datetime import datetime
 ResearchState = Dict[str, Any]
 
 def scoping_and_clarification(state: ResearchState) -> Tuple[ResearchState, str]:
     user_query = state.get("user_query", "")
-    
+    current_date = datetime.now().strftime("%B %d, %Y")
     system_prompt = """
     You are a Research Router. Analyze the user query and decide between 'fast' and 'deep' mode.
-    
+    CURRENT DATE: {current_date}
     1. FAST MODE: Use for simple lookups, recommendations, or quick facts. 
        - If Fast, generate 3-4 specific search queries (fast_tasks).
     2. DEEP MODE: Use for complex analysis, detailed travel planning, or multi-step research.
@@ -339,19 +340,27 @@ def scoping_and_clarification(state: ResearchState) -> Tuple[ResearchState, str]
         return state, "research_brief"
 
 def _create_postgres_mission(state: ResearchState, scoping: Dict) -> int:
-    """Helper to create a persistent mission record for Deep Research."""
     try:
         conn = psycopg2.connect("dbname=postgres user=tarinijain host=localhost")
         cur = conn.cursor()
+        
+        # We use COALESCE-style logic to ensure we don't send None to the DB
+        query_text = state.get("user_query", "No Query")
+        domain_text = scoping.get("domain", "general")
+        mission_uuid = uuid.uuid4()
+        
         cur.execute(
-            "INSERT INTO research_missions (query, domain, status) VALUES (%s, %s, 'scoped') RETURNING id",
-            (state["user_query"], scoping.get("domain", "general"))
+            "INSERT INTO research_missions (id, user_query, domain, status) VALUES (%s, %s, %s, 'scoped') RETURNING id",
+            (str(mission_uuid), query_text, domain_text)
         )
+        
         m_id = cur.fetchone()[0]
         conn.commit()
         cur.close()
         conn.close()
+        print(f"✅ DB Success: Generated Mission ID {m_id}")
         return m_id
     except Exception as e:
+        # Check your terminal for this specific message!
         print(f"❌ DB Mission Creation Failed: {e}")
-        return 0
+        return None

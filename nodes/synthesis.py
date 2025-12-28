@@ -479,7 +479,7 @@ import psycopg2
 import json
 from typing import Dict, Any, List
 from my_llm.ollama_client import chat_with_llm
-
+from datetime import datetime
 ResearchState = Dict[str, Any]
 
 def run_synthesis(state: ResearchState) -> ResearchState:
@@ -488,7 +488,7 @@ def run_synthesis(state: ResearchState) -> ResearchState:
     mission_id = state.get("mission_id")
     research_brief = state.get("research_brief", {})
     target = state.get("target") or research_brief.get("target", "the subject")
-    
+    current_date = datetime.now().strftime("%B %d, %Y")
     print(f"\n✍️ Running Synthesis Node ({mode.upper()} mode)...")
 
     # --- 1. COLLECT DATA ---
@@ -538,7 +538,7 @@ def run_synthesis(state: ResearchState) -> ResearchState:
         report_name = research_brief.get("settings", {}).get("name", "Deep Research Report")
         system_prompt = f"""
         You are a Senior Research Analyst. Write a professional, detailed Markdown report titled '{report_name}' for {target}.
-        
+        CURRENT DATE: {current_date}
         Structure:
         1. Executive Summary
         2. Deep Dive Findings (per sub-question)
@@ -569,7 +569,7 @@ def _mark_mission_complete(mission_id: int):
     try:
         conn = psycopg2.connect("dbname=postgres user=tarinijain host=localhost")
         cur = conn.cursor()
-        cur.execute("UPDATE research_missions SET status = 'completed' WHERE id = %s", (mission_id,))
+        cur.execute("UPDATE research_missions SET status = 'completed' WHERE mission_id = %s", (mission_id,))
         conn.commit()
         cur.close()
         conn.close()

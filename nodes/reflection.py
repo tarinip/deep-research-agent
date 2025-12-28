@@ -107,7 +107,7 @@
 #     cur = conn.cursor()
     
 #     cur.execute(
-#         "SELECT topic, content FROM research_nodes WHERE mission_id = %s", 
+#         "SELECT topic, content FROM research_nodes WHERE id = %s", 
 #         (mission_id,)
 #     )
 #     findings = cur.fetchall()
@@ -138,7 +138,7 @@
         
 #         # Inject the gap back into the tasks table for the Research Node to find
 #         cur.execute(
-#             "INSERT INTO research_tasks (mission_id, question, status) VALUES (%s, %s, %s)",
+#             "INSERT INTO research_tasks (id, question, status) VALUES (%s, %s, %s)",
 #             (mission_id, f"Deep dive into {new_gap}", "pending")
 #         )
 #         conn.commit()
@@ -162,7 +162,7 @@ from typing import Dict, Any, List
 # or keep your ollama_client if that is your preference.
 from langchain_openai import ChatOpenAI 
 from pgvector.psycopg2 import register_vector
-
+from datetime import datetime
 ResearchState = Dict[str, Any]
 
 def run_reflection_tool(state: ResearchState) -> ResearchState:
@@ -192,7 +192,7 @@ def run_reflection_tool(state: ResearchState) -> ResearchState:
     
     # If we have no findings at all, we must check if we've failed everything
     if not findings:
-        cur.execute("SELECT count(*) FROM research_tasks WHERE mission_id = %s AND status = 'failed'", (mission_id,))
+        cur.execute("SELECT count(*) FROM research_tasks WHERE id = %s AND status = 'failed'", (mission_id,))
         failed_count = cur.fetchone()[0]
         if failed_count > 0:
             print("   ⚠️ No findings found, but tasks have failed. Stopping loop.")
@@ -204,11 +204,11 @@ def run_reflection_tool(state: ResearchState) -> ResearchState:
     # 3. Use LLM to Audit for Gaps
     # Using a slightly stricter prompt to prevent the LLM from being too "curious"
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-    
+    current_date = datetime.now().strftime("%B %d, %Y")
     system_prompt = f"""
     You are a Senior Research Auditor. 
     Review gathered facts for '{target}'. Original Goal: {brief.get('summary', 'General Research')}
-    
+    CURRENT DATE: {current_date}
     Findings so far:
     {context_summary}
     

@@ -726,7 +726,7 @@ import asyncio
 import operator
 from typing import Annotated, List, Optional, Dict, Any, TypedDict, Literal
 from langgraph.graph import StateGraph, START, END
-
+import asyncio
 from nodes.scoping import scoping_and_clarification
 from nodes.reseach_brief import build_research_brief
 from nodes.research import run_fast_research, run_deep_research 
@@ -739,9 +739,13 @@ class ResearchState(TypedDict):
     research_mode: Literal["fast", "deep"] 
     next_node: Optional[str] 
     sub_questions: List[str]
-    mission_id: Optional[int] 
+    mission_id: Optional[str] 
     raw_research_output: Annotated[List[Dict[str, Any]], operator.add] 
     final_report: Optional[str]
+    
+    # --- New Tracking Fields ---
+    mission_id: str  # Changed to str to support UUIDs
+    user_id: int     # To link to the users table
 
 # --- Wrappers ---
 def scoping_wrapper(state: ResearchState):
@@ -808,9 +812,9 @@ def build_research_graph():
     
     graph.add_edge("synthesis", END) 
     return graph.compile()
-
+app = build_research_graph()
 async def run_app():
-    app = build_research_graph()
+   # app = build_research_graph()
     
     print("\n🚀 --- AI Deep Research System ---")
     user_query = input("🧑 Enter your research topic: ")
@@ -860,7 +864,7 @@ async def run_app():
             break
 
 if __name__ == "__main__":
-    import asyncio
+    
     try:
         asyncio.run(run_app())
     except KeyboardInterrupt:
