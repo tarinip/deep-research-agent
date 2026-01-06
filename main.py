@@ -897,6 +897,8 @@ from nodes.synthesis import run_synthesis
 class ResearchState(TypedDict):
     # Core Identity
     user_query: str
+    original_query: str
+    
     user_id: int
     mission_id: str 
     
@@ -919,28 +921,59 @@ class ResearchState(TypedDict):
 # 2. Node Wrappers (Ensuring Data is in the right keys)
 # ============================================================
 
+
+# def scoping_wrapper(state: ResearchState) -> ResearchState:
+#     print("\n🌀 Running SCOPING node...")
+#     # --- CONTEXT MERGING LOGIC ---
+#     # If we already have a clarification question in state, it means 
+#     # the current 'user_query' is an ANSWER to that question.
+#     if state.get("clarification_needed") and state.get("clarification_question"):
+#         previous_context = f"Original Query: {state['user_query']}\nAI Asked: {state['clarification_question']}"
+#         # We don't overwrite user_query yet, we just pass the context 
+#         # to the scoping function so the LLM can see the history.
+#         state["user_query"] = f"{previous_context}\nUser Answered: {state['user_query']}"
+
+#     # Run the underlying logic
+#     updated_values, next_step = scoping_and_clarification(state)
+    
+#     # Flatten the results for the UI
+#     if "scoping_result" in updated_values:
+#         res = updated_values["scoping_result"]
+#         updated_values["clarification_needed"] = res.get("clarification_needed", False)
+#         updated_values["clarification_question"] = res.get("clarification_question")
+
+#     updated_values["next_node"] = next_step
+    # return updated_values
 def scoping_wrapper(state: ResearchState) -> ResearchState:
     print("\n🌀 Running SCOPING node...")
-    # --- CONTEXT MERGING LOGIC ---
-    # If we already have a clarification question in state, it means 
-    # the current 'user_query' is an ANSWER to that question.
-    if state.get("clarification_needed") and state.get("clarification_question"):
-        previous_context = f"Original Query: {state['user_query']}\nAI Asked: {state['clarification_question']}"
-        # We don't overwrite user_query yet, we just pass the context 
-        # to the scoping function so the LLM can see the history.
-        state["user_query"] = f"{previous_context}\nUser Answered: {state['user_query']}"
-
-    # Run the underlying logic
-    updated_values, next_step = scoping_and_clarification(state)
     
-    # Flatten the results for the UI
-    if "scoping_result" in updated_values:
-        res = updated_values["scoping_result"]
-        updated_values["clarification_needed"] = res.get("clarification_needed", False)
-        updated_values["clarification_question"] = res.get("clarification_question")
+    user_input = state.get("user_query", "")
+    current_target = state.get("target", "").lower()
+    
+    # 1. Run scoping logic first to see what the NEW query is about
+    updated_values, next_step = scoping_and_clarification(state)
+    new_scoping = updated_values.get("scoping_result", {})
+    new_target = new_scoping.get("target", "").lower()
 
-    updated_values["next_node"] = next_step
-    return updated_values
+    # 2. INTENT RESET: If the user changes location, clear the old "Memory"
+    if current_target and new_target and current_target != new_target:
+        print(f"🔄 Topic Switch Detected: {current_target} -> {new_target}. Resetting context.")
+        state["original_query"] = user_input # Start fresh with the Mumbai query
+        # Re-run once with the fresh context so it doesn't mention Genoa
+        updated_values, next_step = scoping_and_clarification(state)
+
+    # 3. FAST MODE BYPASS: If it's a simple question, don't use the "Trip Rule"
+    if new_scoping.get("research_mode") == "fast":
+        return {
+            **updated_values,
+            "clarification_needed": False, # Force false for fast facts
+            "next_node": "fast_research"
+        }
+
+    return {
+        **updated_values,
+        "next_node": next_step
+    }
 
 def brief_wrapper(state: ResearchState) -> ResearchState:
     """Unpacks the research brief into tasks/sub-questions."""
