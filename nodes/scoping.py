@@ -15,7 +15,10 @@
 #     system_prompt = f"""
 # You are the Lead Travel Consultant and Scoping Intelligence. 
 # CURRENT DATE: {current_date}
-
+# 1. FAST MODE: Use for simple lookups, recommendations, or quick facts. 
+# - If Fast, generate 3-4 specific search queries (fast_tasks).
+# 2. DEEP MODE: Use for complex analysis, detailed travel planning, or multi-step research.
+# - If Deep, select appropriate templates (e.g., luxury_travel, budget_travel, general).
 # ### MISSION
 # Evaluate the user's travel request. Your goal is to move from a "vague destination" to a "detailed itinerary brief." 
 
@@ -108,15 +111,30 @@ ResearchState = Dict[str, Any]
 def scoping_and_clarification(state: ResearchState) -> Tuple[ResearchState, str]:
     # 1. CONTEXT STITCHING: Combine original intent with new details
     user_input = state.get("user_query", "")
-    original = state.get("original_query", "")
+    mission_id = state.get("mission_id") # LangGraph state should hold this
+    
+    # 1. CONTEXT STITCHING
+    original_goal = ""
+    if mission_id:
+        # If we have an ID, it means we are in a clarification loop
+        original_goal = _get_original_query_from_db(mission_id)
 
-    if original and original.lower() not in user_input.lower():
-        # If we have a stored original query, merge it for the LLM
-        full_context_query = f"ORIGINAL INTENT: {original} | ADDITIONAL DETAILS: {user_input}"
+    # 2. CONSTRUCT THE FULL CONTEXT
+    if original_goal:
+        # The LLM now sees the whole picture: Intent + Answer
+        user_input_query = f"ORIGINAL REQUEST: {original_goal} | NEW CLARIFICATION: {user_input}"
     else:
-        # First time running: set the original query
-        full_context_query = user_input
-        state["original_query"] = user_input
+        # This is the first time the user is asking
+        user_input_query = user_input
+    # original = state.get("original_query", "")
+
+    # if original and original.lower() not in user_input.lower():
+    #     # If we have a stored original query, merge it for the LLM
+    #     full_context_query = f"ORIGINAL INTENT: {original} | ADDITIONAL DETAILS: {user_input}"
+    # else:
+    #     # First time running: set the original query
+    #     full_context_query = user_input
+    #     state["original_query"] = user_input
 
     current_date = datetime.now().strftime("%B %d, %Y")
 
@@ -135,10 +153,11 @@ def scoping_and_clarification(state: ResearchState) -> Tuple[ResearchState, str]
    
   
 
-    ### CONTEXT SWITCHING RULE:
-    - If the 'ADDITIONAL DETAILS' mentions a DIFFERENT city/country than the 'ORIGINAL INTENT', prioritize the NEW city.
-    - If the NEW city is part of a specific question (e.g., "Best time to visit Bali"), set "research_mode": "fast" and "clarification_needed": false.
-    - Do NOT ask for details about the old city if the user has moved on.
+    ### CRITICAL RULE: TARGET OVERWRITE
+    If the CURRENT_RESPONSE mentions a specific location (e.g., 'Vatican'), 
+    but the HISTORY mentions a different one (e.g., 'Paris'), 
+    you MUST update the "target" to the NEW location. 
+    The user's latest input is the 'Source of Truth'.
 
     ### DECISION LOGIC:
     - If dimensions are missing: set "clarification_needed": true.
@@ -159,7 +178,7 @@ def scoping_and_clarification(state: ResearchState) -> Tuple[ResearchState, str]
     """
 
     # 3. CALL LLM
-    raw_response = chat_with_llm(system_prompt=system_prompt, user_prompt=full_context_query)
+    raw_response = chat_with_llm(system_prompt=system_prompt, user_prompt=user_input_query)
     scoping_result = sanitize_json_string(raw_response)
     
     # 4. UPDATE STATE
@@ -184,14 +203,15 @@ def scoping_and_clarification(state: ResearchState) -> Tuple[ResearchState, str]
         print(f"🧪 Deep Route Selected for {state['target']}. Templates: {scoping_result.get('templates')}")
         mission_id = _create_postgres_mission(state, scoping_result)
         state["mission_id"] = mission_id
-        return state, "research_brief"
+   
+    return state, "research_brief"
 
 def _create_postgres_mission(state: ResearchState, scoping: Dict) -> str:
     try:
         # Note: In production, use a connection pool or env variables
         conn = psycopg2.connect("dbname=postgres user=tarinijain host=localhost")
         cur = conn.cursor()
-        
+        cur.execute("DELETE FROM research_tasks WHERE status = 'pending' OR status = 'in_progress'")
         query_text = state.get("original_query", "No Query")
         domain_text = scoping.get("domain", "travel")
         mission_uuid = str(uuid.uuid4())
@@ -209,3 +229,25 @@ def _create_postgres_mission(state: ResearchState, scoping: Dict) -> str:
     except Exception as e:
         print(f"❌ DB Mission Creation Failed: {e}")
         return str(uuid.uuid4()) # Fallback ID to keep the graph moving
+    
+
+
+def _get_original_query_from_db(mission_id: str) -> str:
+    # --- SAFETY CHECK ---
+    # Try to validate if mission_id is a valid UUID before querying
+    try:
+        uuid.UUID(str(mission_id))
+    except ValueError:
+        print(f"⚠️ Skipping DB Lookup: '{mission_id}' is not a valid UUID format.")
+        return ""
+
+    try:
+        conn = psycopg2.connect("dbname=postgres user=tarinijain host=localhost")
+        cur = conn.cursor()
+        cur.execute("SELECT user_query FROM research_missions WHERE id = %s", (mission_id,))
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        return row[0] if row else ""
+    except Exception as e:
+        print(f"❌ DB Retrieval Failed: {e}")

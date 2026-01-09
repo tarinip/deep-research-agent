@@ -901,7 +901,7 @@ class ResearchState(TypedDict):
     
     user_id: int
     mission_id: str 
-    
+    active_task_description: str
     # Logic Routing
     target: Optional[str] 
     research_mode: Literal["fast", "deep"] 
@@ -914,7 +914,7 @@ class ResearchState(TypedDict):
     # Research Data
     sub_questions: List[str]
     # Annotated with operator.add so new research appends to existing research
-    raw_research_output: Annotated[List[Dict[str, Any]], operator.add] 
+    raw_research_output: List[dict]
     final_report: Optional[str]
 
 # ============================================================
@@ -992,43 +992,115 @@ def brief_wrapper(state: ResearchState) -> ResearchState:
 # 3. Graph Builder
 # ============================================================
 
+# def build_research_graph():
+#     # Initialize MemorySaver so the agent remembers previous clarifications
+#     memory = MemorySaver()
+    
+#     graph = StateGraph(ResearchState)
+
+#     # Register Nodes
+#     graph.add_node("scoping", scoping_wrapper)
+#     graph.add_node("research_brief", brief_wrapper)
+#     graph.add_node("fast_research", run_fast_research)
+#     # graph.add_node("deep_research", run_deep_research)
+#     graph.add_conditional_edges(
+#     "run_deep_research",
+#     lambda state: state["next_node"],
+#     {
+#         "run_deep_research": "run_deep_research", # If more tasks exist, run again
+#         "reflection": "reflection"        # If finished, move on
+#     }
+# )
+#     graph.add_node("reflection", run_reflection_tool)
+#     graph.add_node("synthesis", run_synthesis)
+
+#     # Define Edges
+#     graph.add_edge(START, "scoping")
+    
+#     graph.add_conditional_edges(
+#         "scoping",
+#         lambda state: state["next_node"],
+#         {
+#             "research_brief": "research_brief", 
+#             "fast_research": "fast_research",   
+#             "clarification_needed": END,         # Ends the run so Streamlit can take over
+#         }
+#     )
+    
+#     #graph.add_edge("research_brief", "deep_research")
+#     graph.add_edge("fast_research", "synthesis")
+#     graph.add_edge("deep_research", "reflection")
+
+#     graph.add_conditional_edges(
+#         "reflection",
+#         lambda state: state["next_node"],
+#         {
+#             "synthesis": "synthesis",
+#             "research": "deep_research",
+#         }
+#     )
+    
+#     graph.add_edge("synthesis", END) 
+    
+#     # Compile with checkpointer for persistence
+#     return graph.compile(checkpointer=memory)
+
+# # Export the app for app.py to import
+# app = build_research_graph()
 def build_research_graph():
     # Initialize MemorySaver so the agent remembers previous clarifications
     memory = MemorySaver()
     
     graph = StateGraph(ResearchState)
 
-    # Register Nodes
+    # --- 1. Register Nodes ---
     graph.add_node("scoping", scoping_wrapper)
     graph.add_node("research_brief", brief_wrapper)
     graph.add_node("fast_research", run_fast_research)
-    graph.add_node("deep_research", run_deep_research)
+    
+    # Ensure this node name matches exactly across all edges
+    graph.add_node("deep_research", run_deep_research) 
+    
     graph.add_node("reflection", run_reflection_tool)
     graph.add_node("synthesis", run_synthesis)
 
-    # Define Edges
+    # --- 2. Define Workflow & Edges ---
     graph.add_edge(START, "scoping")
     
+    # Decision after scoping: Fast, Deep (via Brief), or Wait for User
     graph.add_conditional_edges(
         "scoping",
         lambda state: state["next_node"],
         {
             "research_brief": "research_brief", 
             "fast_research": "fast_research",   
-            "clarification_needed": END,         # Ends the run so Streamlit can take over
+            "clarification_needed": END,         
         }
     )
     
-    graph.add_edge("research_brief", "deep_research")
+    # Path A: Fast Research
     graph.add_edge("fast_research", "synthesis")
-    graph.add_edge("deep_research", "reflection")
 
+    # Path B: Deep Research (The Loop)
+    graph.add_edge("research_brief", "deep_research")
+    
+    # NEW: Self-looping edge for deep_research to show tasks one-by-one
+    graph.add_conditional_edges(
+        "deep_research",
+        lambda state: state["next_node"],
+        {
+            "deep_research": "deep_research", # If a task was just finished, loop back for next
+            "reflection": "reflection"        # If no pending tasks remain, move on
+        }
+    )
+
+    # Path C: Reflection & Synthesis
     graph.add_conditional_edges(
         "reflection",
         lambda state: state["next_node"],
         {
             "synthesis": "synthesis",
-            "research": "deep_research",
+            "deep_research": "deep_research", # If reflection says more research is needed
         }
     )
     
@@ -1039,7 +1111,6 @@ def build_research_graph():
 
 # Export the app for app.py to import
 app = build_research_graph()
-
 # ============================================================
 # 4. Terminal Runner (For local testing)
 # ============================================================
@@ -1077,7 +1148,7 @@ async def run_terminal_app():
             # Update query and re-run
             current_state = final_state
             current_state["user_query"] += f" (Clarification: {user_answer})"
-            continue 
+            continue
         else:
             print("\n" + "="*50)
             print(final_state.get("final_report", "No report generated."))

@@ -240,7 +240,7 @@ def run_reflection_tool(state: ResearchState) -> ResearchState:
                 (mission_id, f"Researching gap: {new_gap}", "pending")
             )
             conn.commit()
-            state["next_node"] = "research"
+            state["next_node"] = "deep_research"
             state["retry_count"] = retry_count + 1
             log = f"Gap identified: {new_gap}. Re-routing to Research (Attempt {state['retry_count']})."
         else:

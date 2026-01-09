@@ -575,73 +575,172 @@
 #         conn.close()
 #     except Exception as e:
 #         print(f"⚠️ Status Update Error: {e}")
+# import psycopg2
+# import json
+# from typing import Dict, Any, List
+# from my_llm.ollama_client import chat_with_llm
+# from datetime import datetime
+
+# # --- NEW: Simple Token Approximation Utility ---
+# def limit_string_tokens(text: str, max_chars: int = 400000) -> str:
+#     """
+#     Roughly limits the context size. 400k characters is approx 100k tokens.
+#     This prevents the '400 - context_length_exceeded' error.
+#     """
+#     if len(text) > max_chars:
+#         return text[:max_chars] + "\n\n... [TRUNCATED DUE TO CONTEXT LIMITS] ..."
+#     return text
+
+# def run_synthesis(state: Dict[str, Any]) -> Dict[str, Any]:
+#     mode = state.get("research_mode", "fast")
+#     mission_id = state.get("mission_id")
+#     research_brief = state.get("research_brief", {})
+#     target = state.get("target") or research_brief.get("target", "the subject")
+#     current_date = datetime.now().strftime("%B %d, %Y")
+    
+#     print(f"\n✍️ Running Synthesis Node ({mode.upper()} mode)...")
+
+#     # --- 1. COLLECT DATA ---
+#     context_blocks = []
+    
+#     if mode == "fast":
+#         fast_findings = state.get("raw_research_output", [])
+#         if isinstance(fast_findings, list):
+#             for item in fast_findings:
+#                 query = item.get("query") or item.get("task", "General Task")
+#                 content = item.get("content") or item.get("result", "")
+#                 if content:
+#                     context_blocks.append(f"Q: {query}\nA: {content}")
+#     else:
+#         if mission_id:
+#             try:
+#                 conn = psycopg2.connect("dbname=postgres user=tarinijain host=localhost")
+#                 cur = conn.cursor()
+#                 cur.execute(
+#                     "SELECT topic, content, source_url FROM research_nodes WHERE mission_id = %s",
+#                     (mission_id,)
+#                 )
+#                 db_rows = cur.fetchall()
+#                 for row in db_rows:
+#                     # Prune each block slightly to ensure essential info is kept
+#                     context_blocks.append(f"TOPIC: {row[0]}\nFINDING: {row[1]}\nSOURCE: {row[2]}")
+#                 cur.close()
+#                 conn.close()
+#             except Exception as e:
+#                 print(f"⚠️ Postgres Fetch Warning: {e}")
+
+#     # --- 2. APPLY CONTEXT TRIMMER ---
+#     # We join everything then force a character limit to stay under the 128k token cap
+#     full_context = "\n---\n".join(context_blocks)
+    
+#     # 400,000 characters is a safe upper bound for a 128k token model 
+#     # to allow room for the instructions and the generated report.
+#     full_context = limit_string_tokens(full_context, max_chars=350000) 
+    
+#     if not full_context.strip():
+#         state["final_report"] = "No research findings were collected."
+#         return state
+
+#     # --- 3. CONDITIONAL PROMPT LOGIC ---
+#     if mode == "fast":
+#         system_prompt = f"You are a helpful assistant. Provide a very short, crisp, and bulleted summary for {target}. Focus only on the most vital facts."
+#         user_prompt = f"Summarize this context into a few punchy bullet points:\n\n{full_context}"
+#     else:
+#         report_name = research_brief.get("settings", {}).get("name", "Deep Research Report")
+#         system_prompt = f"""
+#         You are a Senior Research Analyst. Write a professional, detailed Markdown report titled '{report_name}' for {target}.
+#         CURRENT DATE: {current_date}
+#         Structure:
+#         1. Executive Summary
+#         2. Deep Dive Findings (per sub-question)
+#         3. Analysis & Implications
+#         4. Comprehensive Bibliography
+        
+#         Constraint: Use ONLY the provided context and cite sources.
+#         """
+#         user_prompt = f"### RESEARCH CONTEXT ###\n{full_context}\n\n### BRIEF ###\n{json.dumps(research_brief, indent=2)}\n\nGenerate the full professional report."
+
+#     # --- 4. GENERATE WITH SAFETY ---
+#     try:
+#         # We pass the trimmed context directly to the LLM
+#         final_output = chat_with_llm(system_prompt=system_prompt, user_prompt=user_prompt)
+#         state["final_report"] = final_output
+        
+#         if mode == "deep" and mission_id:
+#             _mark_mission_complete(mission_id)
+            
+#     except Exception as e:
+#         # If it STILL fails due to context, we try one last ultra-aggressive trim
+#         if "context_length_exceeded" in str(e).lower():
+#             print("🚨 Emergency Trimming Triggered...")
+#             ultra_trimmed = limit_string_tokens(full_context, max_chars=100000)
+#             final_output = chat_with_llm(system_prompt=system_prompt, user_prompt=f"[EMERGENCY TRIM APPLIED]\n{ultra_trimmed}")
+#             state["final_report"] = final_output
+#         else:
+#             print(f"❌ Synthesis Error: {e}")
+#             state["final_report"] = f"Synthesis failed: {e}"
+
+#     print(f"🎉 Synthesis complete in {mode} mode.")
+#     # return state
+#     return state
+
+# def _mark_mission_complete(mission_id: str):
+#     try:
+#         conn = psycopg2.connect("dbname=postgres user=tarinijain host=localhost")
+#         cur = conn.cursor()
+#         cur.execute("UPDATE research_missions SET status = 'completed' WHERE id = %s", (str(mission_id),))
+#         conn.commit()
+#         cur.close()
+#         conn.close()
+#     except Exception as e:
+#         print(f"⚠️ Status Update Error: {e}")
 import psycopg2
 import json
 from typing import Dict, Any, List
-from my_llm.ollama_client import chat_with_llm
 from datetime import datetime
+from langgraph.types import Overwrite # 🚨 CRITICAL for wiping add-mode lists
+from my_llm.ollama_client import chat_with_llm
 
-# --- NEW: Simple Token Approximation Utility ---
 def limit_string_tokens(text: str, max_chars: int = 400000) -> str:
-    """
-    Roughly limits the context size. 400k characters is approx 100k tokens.
-    This prevents the '400 - context_length_exceeded' error.
-    """
+    """Rough character-based truncation to stay under 128k context limits."""
     if len(text) > max_chars:
-        return text[:max_chars] + "\n\n... [TRUNCATED DUE TO CONTEXT LIMITS] ..."
+        return text[:max_chars] + "\n\n... [TRUNCATED] ..."
     return text
 
 def run_synthesis(state: Dict[str, Any]) -> Dict[str, Any]:
     mode = state.get("research_mode", "fast")
     mission_id = state.get("mission_id")
     research_brief = state.get("research_brief", {})
-    target = state.get("target") or research_brief.get("target", "the subject")
+    target = state.get("target") or "the destination"
     current_date = datetime.now().strftime("%B %d, %Y")
     
-    print(f"\n✍️ Running Synthesis Node ({mode.upper()} mode)...")
+    print(f"\n✍️ Finalizing Report for {target}...")
 
-    # --- 1. COLLECT DATA ---
+    # --- 1. GATHER CONTEXT ---
     context_blocks = []
-    
     if mode == "fast":
         fast_findings = state.get("raw_research_output", [])
-        if isinstance(fast_findings, list):
-            for item in fast_findings:
-                query = item.get("query") or item.get("task", "General Task")
-                content = item.get("content") or item.get("result", "")
-                if content:
-                    context_blocks.append(f"Q: {query}\nA: {content}")
+        for item in fast_findings:
+            context_blocks.append(f"Q: {item.get('query')}\nA: {item.get('content')}")
     else:
+        # Fetch from DB for Deep Mode
         if mission_id:
             try:
                 conn = psycopg2.connect("dbname=postgres user=tarinijain host=localhost")
-                cur = conn.cursor()
-                cur.execute(
-                    "SELECT topic, content, source_url FROM research_nodes WHERE mission_id = %s",
-                    (mission_id,)
-                )
-                db_rows = cur.fetchall()
-                for row in db_rows:
-                    # Prune each block slightly to ensure essential info is kept
-                    context_blocks.append(f"TOPIC: {row[0]}\nFINDING: {row[1]}\nSOURCE: {row[2]}")
-                cur.close()
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT topic, content, source_url FROM research_nodes WHERE mission_id = %s",
+                        (str(mission_id),)
+                    )
+                    for row in cur.fetchall():
+                        context_blocks.append(f"TOPIC: {row[0]}\nFINDING: {row[1]}\nSOURCE: {row[2]}")
                 conn.close()
             except Exception as e:
-                print(f"⚠️ Postgres Fetch Warning: {e}")
+                print(f"⚠️ DB Fetch Warning: {e}")
 
-    # --- 2. APPLY CONTEXT TRIMMER ---
-    # We join everything then force a character limit to stay under the 128k token cap
-    full_context = "\n---\n".join(context_blocks)
-    
-    # 400,000 characters is a safe upper bound for a 128k token model 
-    # to allow room for the instructions and the generated report.
-    full_context = limit_string_tokens(full_context, max_chars=350000) 
-    
-    if not full_context.strip():
-        state["final_report"] = "No research findings were collected."
-        return state
+    full_context = limit_string_tokens("\n---\n".join(context_blocks), max_chars=350000)
 
-    # --- 3. CONDITIONAL PROMPT LOGIC ---
+    # --- 2. GENERATE REPORT ---
     if mode == "fast":
         system_prompt = f"You are a helpful assistant. Provide a very short, crisp, and bulleted summary for {target}. Focus only on the most vital facts."
         user_prompt = f"Summarize this context into a few punchy bullet points:\n\n{full_context}"
@@ -660,36 +759,43 @@ def run_synthesis(state: Dict[str, Any]) -> Dict[str, Any]:
         """
         user_prompt = f"### RESEARCH CONTEXT ###\n{full_context}\n\n### BRIEF ###\n{json.dumps(research_brief, indent=2)}\n\nGenerate the full professional report."
 
-    # --- 4. GENERATE WITH SAFETY ---
-    try:
-        # We pass the trimmed context directly to the LLM
-        final_output = chat_with_llm(system_prompt=system_prompt, user_prompt=user_prompt)
-        state["final_report"] = final_output
+    final_report = chat_with_llm(system_prompt=system_prompt, user_prompt=user_prompt)
+
+    # --- 3. THE CLEANUP (The Final Step) ---
+    
+    # A. Delete from Database
+    if mission_id:
+        _db_cleanup(mission_id)
+
+    # B. Update State & Clear Scaffolding
+    # We return the report and use Overwrite() to empty lists in memory
+    return {
+        "final_report": final_report,
+        "active_task_description": "Mission Accomplished.",
         
-        if mode == "deep" and mission_id:
-            _mark_mission_complete(mission_id)
-            
-    except Exception as e:
-        # If it STILL fails due to context, we try one last ultra-aggressive trim
-        if "context_length_exceeded" in str(e).lower():
-            print("🚨 Emergency Trimming Triggered...")
-            ultra_trimmed = limit_string_tokens(full_context, max_chars=100000)
-            final_output = chat_with_llm(system_prompt=system_prompt, user_prompt=f"[EMERGENCY TRIM APPLIED]\n{ultra_trimmed}")
-            state["final_report"] = final_output
-        else:
-            print(f"❌ Synthesis Error: {e}")
-            state["final_report"] = f"Synthesis failed: {e}"
+        # 🚨 WIPING THE GHOSTS:
+        # These keys usually use Annotated[list, operator.add]. 
+        # Overwrite([]) tells LangGraph to replace the list with empty, not append.
+        "sub_questions": Overwrite([]),       # Clears research gaps
+        "raw_research_output": Overwrite([]), # Clears raw data
+        "task_log": Overwrite([]),            # Clears UI progress logs
+        "reflection_log": Overwrite(""),      # Clears internal thoughts
+        "clarification_needed": False
+    }
 
-    print(f"🎉 Synthesis complete in {mode} mode.")
-    return state
-
-def _mark_mission_complete(mission_id: str):
+def _db_cleanup(mission_id: str):
+    """Removes temporary research nodes while keeping the mission record."""
     try:
         conn = psycopg2.connect("dbname=postgres user=tarinijain host=localhost")
-        cur = conn.cursor()
-        cur.execute("UPDATE research_missions SET status = 'completed' WHERE id = %s", (str(mission_id),))
-        conn.commit()
-        cur.close()
+        with conn.cursor() as cur:
+            # Mark mission as complete
+            cur.execute("UPDATE research_missions SET status = 'completed' WHERE id = %s", (str(mission_id),))
+            # Delete the raw findings/gaps to save space
+            cur.execute("DELETE FROM research_nodes WHERE mission_id = %s", (str(mission_id),))
+            # (Optional) Delete tasks if you have a separate task table
+            # cur.execute("DELETE FROM research_tasks WHERE mission_id = %s", (str(mission_id),))
+            conn.commit()
         conn.close()
+        print(f"🧹 DB Scrubbed for Mission {mission_id}")
     except Exception as e:
-        print(f"⚠️ Status Update Error: {e}")
+        print(f"⚠️ Cleanup failed: {e}")

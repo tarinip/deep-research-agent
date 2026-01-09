@@ -61,86 +61,163 @@ async def run_fast_research(state: ResearchState) -> ResearchState:
     return {"raw_research_output": results, "next_node": "synthesis"}
 
 # 🧐 AGENT 2: DEEP SEQUENTIAL RESEARCH (DuckDuckGo API + Postgres)
+# def run_deep_research(state: ResearchState) -> ResearchState:
+#     mission_id = state.get("mission_id")
+#     target = state.get("target", "the subject")
+    
+#     if not mission_id:
+#         print("❌ No Mission ID found in state.")
+#         return state
+
+#     try:
+#         conn = psycopg2.connect("dbname=postgres user=tarinijain host=localhost")
+#         register_vector(conn)
+#         cur = conn.cursor()
+#     except Exception as e:
+#         print(f"❌ Database Connection Error: {e}")
+#         return state
+
+#     cur.execute(
+#         "SELECT id, question FROM research_tasks WHERE mission_id = %s AND status = 'pending'",
+#         (mission_id,)
+#     )
+#     tasks = cur.fetchall()
+
+#     if not tasks:
+#         print("✅ No pending tasks. Moving to synthesis.")
+#         state["next_node"] = "synthesis"
+#         cur.close()
+#         conn.close()
+#         return state
+
+#     for task_id, question in tasks:
+#         # A. Clean query for DDG
+#         query = question.replace("{target}", target)
+#         print(f"\n🔍 Deep Researching Task {task_id}: {query}")
+        
+#         cur.execute("UPDATE research_tasks SET status = 'searching' WHERE id = %s", (task_id,))
+#         conn.commit()
+
+#         try:
+#             # B. DuckDuckGo Instant Answer API Call
+#             url = "https://api.duckduckgo.com/"
+#             params = {"q": query, "format": "json", "no_redirect": "1"}
+#             response = requests.get(url, params=params)
+#             data = response.json()
+
+#             # C. Extract Context (Abstract or Related Topics)
+#             context = data.get("AbstractText", "")
+#             if not context and data.get("RelatedTopics"):
+#                 context = "\n".join([t.get("Text", "") for t in data["RelatedTopics"][:3] if "Text" in t])
+
+#             # D. Summarize (Fallback to LLM knowledge if API returns nothing)
+#             if not context:
+#                 print(f"      ⚠️ No DDG Instant Answer. Using LLM fallback...")
+#                 summary_text = llm.invoke(f"Provide factual research on {query} regarding {target}").content
+#             else:
+#                 summary_text = llm.invoke(f"Summarize this research context for {query}: {context}").content
+
+#             # E. Generate Embedding
+#             embedding = embeddings_model.embed_query(summary_text)
+
+#             # F. Save to Postgres
+#             source_url = data.get("AbstractURL") if data.get("AbstractURL") else "https://duckduckgo.com"
+#             cur.execute("""
+#                 INSERT INTO research_nodes (mission_id, topic, content, source_url, embedding)
+#                 VALUES (%s, %s, %s, %s, %s)
+#             """, (mission_id, query, summary_text, source_url, embedding))
+
+#             # G. Update Task Status
+#             cur.execute(
+#                 "UPDATE research_tasks SET status = 'completed', findings_summary = %s WHERE id = %s",
+#                 (summary_text, task_id)
+#             )
+#             conn.commit()
+#             print(f"   ✅ Saved to Database (DDG API Powered)")
+
+#         except Exception as e:
+#             print(f"   ❌ Task {task_id} failed: {e}")
+#             cur.execute("UPDATE research_tasks SET status = 'failed' WHERE mission_id = %s", (task_id,))
+#             conn.commit()
+
+#     cur.close()
+#     conn.close()
+#     state["next_node"] = "reflection"
+#     return state
 def run_deep_research(state: ResearchState) -> ResearchState:
     mission_id = state.get("mission_id")
     target = state.get("target", "the subject")
     
     if not mission_id:
-        print("❌ No Mission ID found in state.")
-        return state
+        return {**state, "next_node": "reflection"}
 
     try:
         conn = psycopg2.connect("dbname=postgres user=tarinijain host=localhost")
         register_vector(conn)
         cur = conn.cursor()
-    except Exception as e:
-        print(f"❌ Database Connection Error: {e}")
-        return state
+        
+        # --- MODIFIED: Fetch ONLY the next pending task ---
+        cur.execute(
+            "SELECT id, question FROM research_tasks WHERE mission_id = %s AND status = 'pending' LIMIT 1",
+            (mission_id,)
+        )
+        task = cur.fetchone()
 
-    cur.execute(
-        "SELECT id, question FROM research_tasks WHERE mission_id = %s AND status = 'pending'",
-        (mission_id,)
-    )
-    tasks = cur.fetchall()
+        if not task:
+            cur.close()
+            conn.close()
+            # No more tasks? Move to reflection
+            return {"next_node": "reflection"}
 
-    if not tasks:
-        print("✅ No pending tasks. Moving to synthesis.")
-        state["next_node"] = "synthesis"
-        cur.close()
-        conn.close()
-        return state
-
-    for task_id, question in tasks:
-        # A. Clean query for DDG
+        task_id, question = task
         query = question.replace("{target}", target)
+        
+        # UI SIGNAL: This key will be caught by your app.py loop
         print(f"\n🔍 Deep Researching Task {task_id}: {query}")
         
         cur.execute("UPDATE research_tasks SET status = 'searching' WHERE id = %s", (task_id,))
         conn.commit()
 
-        try:
-            # B. DuckDuckGo Instant Answer API Call
-            url = "https://api.duckduckgo.com/"
-            params = {"q": query, "format": "json", "no_redirect": "1"}
-            response = requests.get(url, params=params)
-            data = response.json()
+        # --- B, C, D: Research Logic ---
+        url = "https://api.duckduckgo.com/"
+        params = {"q": query, "format": "json", "no_redirect": "1"}
+        response = requests.get(url, params=params)
+        data = response.json()
 
-            # C. Extract Context (Abstract or Related Topics)
-            context = data.get("AbstractText", "")
-            if not context and data.get("RelatedTopics"):
-                context = "\n".join([t.get("Text", "") for t in data["RelatedTopics"][:3] if "Text" in t])
+        context = data.get("AbstractText", "")
+        if not context and data.get("RelatedTopics"):
+            context = "\n".join([t.get("Text", "") for t in data["RelatedTopics"][:3] if "Text" in t])
 
-            # D. Summarize (Fallback to LLM knowledge if API returns nothing)
-            if not context:
-                print(f"      ⚠️ No DDG Instant Answer. Using LLM fallback...")
-                summary_text = llm.invoke(f"Provide factual research on {query} regarding {target}").content
-            else:
-                summary_text = llm.invoke(f"Summarize this research context for {query}: {context}").content
+        if not context:
+            summary_text = llm.invoke(f"Provide factual research on {query} regarding {target}").content
+        else:
+            summary_text = llm.invoke(f"Summarize this research context for {query}: {context}").content
 
-            # E. Generate Embedding
-            embedding = embeddings_model.embed_query(summary_text)
+        # --- E, F, G: Save Logic ---
+        embedding = embeddings_model.embed_query(summary_text)
+        source_url = data.get("AbstractURL") or "https://duckduckgo.com"
+        
+        cur.execute("""
+            INSERT INTO research_nodes (mission_id, topic, content, source_url, embedding)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (mission_id, query, summary_text, source_url, embedding))
 
-            # F. Save to Postgres
-            source_url = data.get("AbstractURL") if data.get("AbstractURL") else "https://duckduckgo.com"
-            cur.execute("""
-                INSERT INTO research_nodes (mission_id, topic, content, source_url, embedding)
-                VALUES (%s, %s, %s, %s, %s)
-            """, (mission_id, query, summary_text, source_url, embedding))
+        cur.execute(
+            "UPDATE research_tasks SET status = 'completed', findings_summary = %s WHERE id = %s",
+            (summary_text, task_id)
+        )
+        conn.commit()
+        
+        cur.close()
+        conn.close()
 
-            # G. Update Task Status
-            cur.execute(
-                "UPDATE research_tasks SET status = 'completed', findings_summary = %s WHERE id = %s",
-                (summary_text, task_id)
-            )
-            conn.commit()
-            print(f"   ✅ Saved to Database (DDG API Powered)")
+        # --- RETURN: This triggers the UI update ---
+        return {
+            "active_task_description": query,  # Captured by status_placeholder
+            "last_completed_question": query, # Captured by brief_placeholder
+            "next_node": "deep_research"      # Loop back to check for more tasks
+        }
 
-        except Exception as e:
-            print(f"   ❌ Task {task_id} failed: {e}")
-            cur.execute("UPDATE research_tasks SET status = 'failed' WHERE mission_id = %s", (task_id,))
-            conn.commit()
-
-    cur.close()
-    conn.close()
-    state["next_node"] = "reflection"
-    return state
+    except Exception as e:
+        print(f"❌ Task failed: {e}")
+        return {"next_node": "reflection"}

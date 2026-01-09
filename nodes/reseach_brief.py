@@ -710,110 +710,32 @@
 # #         print("⚠️ No Mission ID found. Skipping DB persistence.")
 
 # #     return state, "research"
-# import psycopg2
-# import json
-# from typing import Dict, Any
-# from my_llm.ollama_client import chat_with_llm
-# from utils.json_sanitizer import sanitize_json_string
-# from core.template_parser import ResearchTemplateLoader
-
-# ResearchState = Dict[str, Any]
-
-# def build_research_brief(state: ResearchState) -> (ResearchState, str):
-#     # 1. Pull data from the exact keys set in scoping.py
-#     scoping_result = state.get("scoping_result", {})
-#     user_query = state.get("user_query", "")
-#     mission_id = state.get("mission_id")
-    
-#     # FIX: scoping.py uses 'templates' (plural)
-#     # We pull from scoping_result specifically
-#     domain = state.get("active_domain", "travel") 
-#     selected_templates = scoping_result.get("templates", ["general_travel"]) 
-#     target = scoping_result.get("target", state.get("target", "the subject"))
-
-#     print(f"🧪 Briefing Node: Loading tracks {selected_templates} for {target}")
-
-#     loader = ResearchTemplateLoader()
-#     try:
-#         # Load the YAML content based on the templates chosen in scoping
-#         base_plan = loader.load_multiple_from_domain(
-#             domain=domain, 
-#             templates=selected_templates, 
-#             target=target
-#         )
-#     except Exception as e:
-#         print(f"❌ Template Load Error: {e}")
-#         return state, "clarification_needed"
-    
-#     # 2. Extract tasks from the loaded YAML
-#     standard_tasks = []
-#     for section in base_plan.get('objectives', []):
-#         standard_tasks.extend(section.get('tasks', []))
-
-#     # 3. Ask LLM to refine these into a JSON list
-#     system_prompt = f"Refine these {domain} tasks for {target}. Return JSON with 'sub_questions' list."
-#     raw = chat_with_llm(system_prompt=system_prompt, user_prompt=user_query)
-#     parsed = sanitize_json_string(raw)
-    
-#     # 4. CRITICAL: Handover to Research Node
-#     # This prevents the "0 tasks" error
-#     state["research_brief"] = parsed
-#     state["sub_questions"] = parsed.get("sub_questions", []) 
-    
-#     print(f"✅ Brief finalized with {len(state['sub_questions'])} tasks.")
-    
-#     # 5. DB Persistence
-#     if mission_id:
-#         _persist_deep_brief(mission_id, parsed)
-
-#     return state, "research"
-
-# def _persist_deep_brief(mission_id: int, brief: Dict):
-#     """Helper to save the detailed plan to Postgres."""
-#     try:
-#         conn = psycopg2.connect("dbname=postgres user=tarinijain host=localhost")
-#         cur = conn.cursor()
-#         cur.execute(
-#             "UPDATE research_missions SET research_brief = %s, status = 'briefed' WHERE id = %s",
-#             (json.dumps(brief), mission_id)
-#         )
-#         for task_text in brief.get("sub_questions", []):
-#             cur.execute(
-#                 "INSERT INTO research_tasks (mission_id, question) VALUES (%s, %s)",
-#                 (mission_id, task_text)
-#             )
-#         conn.commit()
-#         cur.close()
-#         conn.close()
-#     except Exception as e:
-#         print(f"❌ DB Error: {e}")
 import psycopg2
 import json
-from typing import Dict, Any, Tuple
+from typing import Dict, Any
 from my_llm.ollama_client import chat_with_llm
 from utils.json_sanitizer import sanitize_json_string
 from core.template_parser import ResearchTemplateLoader
-from datetime import datetime
+
 ResearchState = Dict[str, Any]
 
-def build_research_brief(state: ResearchState) -> Tuple[ResearchState, str]:
-    # 1. Pull data from state
-    print(state)
+def build_research_brief(state: ResearchState) -> (ResearchState, str):
+    # 1. Pull data from the exact keys set in scoping.py
     scoping_result = state.get("scoping_result", {})
     user_query = state.get("user_query", "")
     mission_id = state.get("mission_id")
     
-    current_date = datetime.now().strftime("%B %d, %Y")
-    # FIX: Explicitly pull the list of templates from scoping_result
+    # FIX: scoping.py uses 'templates' (plural)
+    # We pull from scoping_result specifically
     domain = state.get("active_domain", "travel") 
     selected_templates = scoping_result.get("templates", ["general_travel"]) 
-    target = scoping_result.get("target", "the subject")
+    target = scoping_result.get("target", state.get("target", "the subject"))
 
-    print(f"🧪 Briefing Node: Merging {len(selected_templates)} tracks: {selected_templates}")
+    print(f"🧪 Briefing Node: Loading tracks {selected_templates} for {target}")
 
     loader = ResearchTemplateLoader()
     try:
-        # Load and combine all objectives from luxury, booking, and identity templates
+        # Load the YAML content based on the templates chosen in scoping
         base_plan = loader.load_multiple_from_domain(
             domain=domain, 
             templates=selected_templates, 
@@ -823,60 +745,45 @@ def build_research_brief(state: ResearchState) -> Tuple[ResearchState, str]:
         print(f"❌ Template Load Error: {e}")
         return state, "clarification_needed"
     
-    # 2. Collect all tasks from the merged plan
+    # 2. Extract tasks from the loaded YAML
     standard_tasks = []
     for section in base_plan.get('objectives', []):
         standard_tasks.extend(section.get('tasks', []))
 
-    # 3. LLM Refinement
-    system_prompt = f"""
-    Refine these {domain} objectives for {target}. 
-    User Query: {user_query}
-    CURRENT DATE: {current_date}
-    Merged Templates: {selected_templates}
-    Objectives: {json.dumps(standard_tasks)}
-    
-    Return ONLY valid JSON:
-    {{
-      "research_question": "Main goal",
-      "sub_questions": ["task 1", "task 2", ...],
-      "summary": "Cohesive plan summary"
-    }}
-    """
-    
+    # 3. Ask LLM to refine these into a JSON list
+    system_prompt = f"Refine these {domain} tasks for {target}. Return JSON with 'sub_questions' list."
     raw = chat_with_llm(system_prompt=system_prompt, user_prompt=user_query)
     parsed = sanitize_json_string(raw)
     
-    # 4. Update State (Crucial for the next Research Loop)
+    # 4. CRITICAL: Handover to Research Node
+    # This prevents the "0 tasks" error
     state["research_brief"] = parsed
-    state["sub_questions"] = parsed.get("sub_questions", [])
+    state["sub_questions"] = parsed.get("sub_questions", []) 
     
-    # 5. PERSISTENCE FIX: Convert dict to JSON string for Postgres
+    print(f"✅ Brief finalized with {len(state['sub_questions'])} tasks.")
+    
+    # 5. DB Persistence
     if mission_id:
-        try:
-            conn = psycopg2.connect("dbname=postgres user=tarinijain host=localhost")
-            cur = conn.cursor()
-            
-            # FIX: Use json.dumps() to avoid "can't adapt type 'dict'" error
-            brief_json_string = json.dumps(parsed)
-            
-            cur.execute(
-                "UPDATE research_missions SET research_brief = %s, status = 'briefed' WHERE id = %s",
-                (brief_json_string, mission_id)
-            )
-            
-            # Insert individual sub-questions
-            for task_text in state["sub_questions"]:
-                cur.execute(
-                    "INSERT INTO research_tasks (mission_id, question, status) VALUES (%s, %s, 'pending')",
-                    (mission_id, task_text)
-                )
-            
-            conn.commit()
-            cur.close()
-            conn.close()
-            print(f"✅ Mission {mission_id} updated and tasks inserted.")
-        except Exception as e:
-            print(f"❌ DB Error in Briefing Node: {e}")
+        _persist_deep_brief(mission_id, parsed)
 
     return state, "research"
+
+def _persist_deep_brief(mission_id: int, brief: Dict):
+    """Helper to save the detailed plan to Postgres."""
+    try:
+        conn = psycopg2.connect("dbname=postgres user=tarinijain host=localhost")
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE research_missions SET research_brief = %s, status = 'briefed' WHERE id = %s",
+            (json.dumps(brief), mission_id)
+        )
+        for task_text in brief.get("sub_questions", []):
+            cur.execute(
+                "INSERT INTO research_tasks (mission_id, question) VALUES (%s, %s)",
+                (mission_id, task_text)
+            )
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"❌ DB Error: {e}")
