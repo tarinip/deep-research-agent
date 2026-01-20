@@ -2059,6 +2059,8 @@ async def run_research_graph(inputs, thread_id, status_placeholder, brief_placeh
     
     config = {"configurable": {"thread_id": thread_id}}
     final_state = dict(inputs) 
+    inputs["active_task_description"] = ""
+
 
     async for chunk in graph_app.astream(inputs, config=config, stream_mode="updates"):
         for node_name, output in chunk.items():
@@ -2200,16 +2202,30 @@ def research_interface():
         }
 
         with st.chat_message("assistant"):
+            # 1. Create placeholders for plain text and progress bar
+            progress_text = st.empty()
+            progress_bar = st.empty()
+            
+            # Additional placeholders for your graph updates
             status_area = st.empty()
             brief_area = st.empty() 
             
-            with st.status("🚀 Running Research Pipeline...", expanded=True) as status:
-                try:
+            # 2. Initial state
+            progress_text.text("Running research pipeline...")
+            #bar = progress_bar.progress(0)
+        
+            try:
+                # Update progress to show activity started
+                    #bar.progress(10)
+                    
                     final_state = asyncio.run(
                         run_research_graph(inputs, st.session_state.current_mission_id, status_area, brief_area)
                     )
-                    status.update(label="✅ Mission Complete", state="complete", expanded=False)
-                except Exception as e:
+                    
+                    # 3. Final success state
+                    #bar.progress(100)
+                    progress_text.text("Mission accomplished.")
+            except Exception as e:
                     status.update(label="❌ Pipeline Failed", state="error")
                     st.error(f"Error: {e}")
                     final_state = {}
